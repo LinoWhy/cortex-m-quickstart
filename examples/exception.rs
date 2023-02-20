@@ -10,12 +10,17 @@
 #![no_main]
 #![no_std]
 
+use core::fmt::Write;
+
 use panic_halt as _;
 
 use cortex_m::peripheral::syst::SystClkSource;
 use cortex_m::Peripherals;
 use cortex_m_rt::{entry, exception};
-use cortex_m_semihosting::hprint;
+use cortex_m_semihosting::{
+    debug,
+    hio::{self, HostStream},
+};
 
 #[entry]
 fn main() -> ! {
@@ -25,6 +30,7 @@ fn main() -> ! {
     // configures the system timer to trigger a SysTick exception every second
     syst.set_clock_source(SystClkSource::Core);
     syst.set_reload(8_000_000); // period = 1s
+    syst.clear_current();
     syst.enable_counter();
     syst.enable_interrupt();
 
@@ -33,5 +39,22 @@ fn main() -> ! {
 
 #[exception]
 fn SysTick() {
-    hprint!(".").unwrap();
+    // [exception] attribute transforms static variables to &mut
+    static mut COUNT: u32 = 0;
+    static mut STDOUT: Option<HostStream> = None;
+
+    *COUNT += 1;
+
+    if STDOUT.is_none() {
+        *STDOUT = hio::hstdout().ok();
+    }
+
+    if let Some(hstdout) = STDOUT.as_mut() {
+        // hstdout.write_fmt(format_args!("{}\n", *COUNT)).ok();
+        write!(hstdout, "{} ", *COUNT).ok();
+    }
+
+    if *COUNT == 10 {
+        debug::exit(debug::EXIT_SUCCESS);
+    }
 }
